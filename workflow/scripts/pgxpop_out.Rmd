@@ -1,0 +1,288 @@
+---
+title: "PGxPOP Report"
+output:
+    github_document:
+        toc: true
+---
+
+```{r setup, include=FALSE}
+# Default  is location of .Rmd file
+knitr::opts_knit$set(root.dir = "../../")
+knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+library(knitr)
+```
+
+Following the pipeline described in [McInnes et al (2020). Pharmacogenetics
+at Scale: An Analysis of the UK Biobank. *Clinical Pharmacology & Therapeutics*](https://doi.org/10.1002/cpt.2122)
+
+Pharmacogenes are assigned a __star allele__, and __clinical function__ is assigned to the star allele.
+
+Note: Imputed data (aligned to Genome Reference Consortium Human Build 37,
+GRCh37 (synonym hg19)) lifted over to GRCh38 (synonym hg38)
+to match exome sequencing data.
+
+McInnes et al. [returned dataset 3388](https://biobank.ndph.ox.ac.uk/ukb/dset.cgi?id=3388)
+
+```{bash, echo=TRUE, eval=FALSE}
+cd /scratch/datasets/ukbiobank/ukb56514/raw
+../../bin/ukblink -r3388 -aukb47932.key
+unzip ukbreturn3388.zip
+```
+
+Includes the directory FFR_33722_1
+
+<pre>
+FFR_33722_1/
+├── cpt.2122.pdf
+├── pgx_calls.imputed_callset_DAedit.csv
+├── pgx_calls.integrated_callset_DAedit.csv
+└── README.md
+</pre>
+
+```{r read_cyp_returned_calls}
+
+returned_dir <- "/scratch/datasets/ukbiobank/ukb56514/raw/FFR_33722_1"
+column_spec <- cols(
+    sample_id = col_character(),
+    gene = col_character(),
+    diplotype = col_character(),
+    phenotype_presumptive = col_character()
+)
+
+returned_imputed <- read_csv(
+    file.path(returned_dir, "pgx_calls.imputed_callset_DAedit.csv"),
+    col_types = column_spec
+) %>%
+    filter(str_detect(gene, "CYP2D6|CYP2C19"))
+
+returned_integrated <- read_csv(
+    file.path(returned_dir, "pgx_calls.integrated_callset_DAedit.csv"),
+    col_types = column_spec
+) %>%
+    filter(str_detect(gene, "CYP2D6|CYP2C19"))
+```
+
+<br>
+
+## Returned counts
+
+Phenotype counts reported are for "presumptive_phenotype"
+
+__Returned phenotype count CYP2C19__
+```{r count_returned_cyp2c19}
+returned_imputed %>%
+    filter(str_detect(gene, "CYP2C19")) %>%
+    count(phenotype_presumptive) %>%
+    full_join(
+        returned_integrated %>%
+            filter(str_detect(gene, "CYP2C19")) %>%
+            count(phenotype_presumptive),
+        by = "phenotype_presumptive",
+        suffix = c("_imputed", "_integrated")
+    ) %>%
+    mutate(
+        prop_imputed = round(n_imputed / sum(n_imputed), 2),
+        prop_integrated = round(n_integrated / sum(n_integrated), 2)
+    )
+```
+
+<br>
+
+__Returned phenotype count CYP2D6__
+```{r count_returned_cyp2d6}
+returned_imputed %>%
+    filter(str_detect(gene, "CYP2D6")) %>%
+    count(phenotype_presumptive) %>%
+    full_join(
+        returned_integrated %>%
+            filter(str_detect(gene, "CYP2D6")) %>%
+            count(phenotype_presumptive),
+        by = "phenotype_presumptive",
+        suffix = c("_imputed", "_integrated")
+    ) %>%
+    mutate(
+        prop_imputed = round(n_imputed / sum(n_imputed), 2),
+        prop_integrated = round(n_integrated / sum(n_integrated), 2)
+    )
+```
+
+<br>
+
+## Calculated counts
+
+Metabolic phenotypes for CYP2C19 (poor, intermediate/intermediate+, extensive/extensive+, ultra-rapid)
+previously defined by common polymorphisms rs4244285 and rs12248560 
+[Fabbri et al.](https://pubmed.ncbi.nlm.nih.gov/30135031/).
+
+See PharmGKB [CYP2C19](https://www.pharmgkb.org/page/cyp2c19RefMaterials)
+and CYP2D6](https://www.pharmgkb.org/page/cyp2d6RefMaterials) reference material.
+
+* CYP2C19:
+    - _hg19 coordinates_ chr10:96,522,463-96,612,671 (UCSC, total exon count 9)
+    - _hg38 (GRCh38) coordinates_ chr10:94,762,681-94,855,547 (UCSC, total exon count 9)
+        - UKB exome block 24, 93795159 - 95869829
+
+* CYP2D6:
+    - _hg19 coordinates_ chr22:42,522,501-42,526,883 (UCSC, total exon count 9)
+    - _hg38 (GRCh38) coordinates_ chr22:42,126,499-42,130,810 (UCSC, total exon count 9)
+        - UKB exome block 16, 41603021 - 42642420
+
+<br>
+
+```{r read_pgxpop_output, message = FALSE}
+header <- c(
+    "sample_id", "gene", "diplotype", "hap_1", "hap_2",
+    "hap_1_function", "hap_2_function", "hap_1_variants", "hap_2_variants",
+    "phenotype", "hap_1_presumptive", "hap_2_presumptive", "phenotype_presumptive",
+    "activity_score", "uncallable", "additional_column", "extra_variants"
+)
+
+# chr10
+
+cyp2c19_imp <- read_csv("data/chr10.pgxpopout", col_names = FALSE, skip = 1) %>%
+    set_names(header)
+
+# cyp2c19_wes <- read_csv("data/chr10_wes.pgxpopout", col_names = FALSE, skip = 1) %>%
+#     set_names(header)
+
+# cyp2c19_merged <- read_csv("data/chr10_merged.pgxpopout", col_names = FALSE, skip = 1) %>%
+#     set_names(header)
+
+
+# chr22
+
+cyp2d6_imp <- read_csv("data/chr22.pgxpopout", col_names = FALSE, skip = 1) %>%
+    set_names(header)
+
+# cyp2d6_wes <- read_csv("data/chr22_wes.pgxpopout", col_names = FALSE, skip = 1) %>%
+#     set_names(header) %>%
+#     mutate(sample_id = str_c(sample_id, sample_id, sep = "_"))
+
+# cyp2d6_merged <- read_csv("data/chr22_merged.pgxpopout", col_names = FALSE, skip = 1) %>%
+#     set_names(header)
+```
+
+__Phenotype count CYP2C19__
+```{r cyp2c19_phenotype_counts}
+
+# library(RSQLite)
+
+# connection <- dbConnect(
+#     RSQLite::SQLite(),
+#     "/scratch/datasets/ukbiobank/June2017/Imputed/ukb_imp_chr10_v3_MAF0_INFO7.bgen.bgi"
+# )
+
+# chr10_index <- dbGetQuery(connection, "SELECT * FROM Variant")
+
+
+count(cyp2c19_imp, phenotype_presumptive) %>%
+    full_join(
+        count(cyp2c19_wes, phenotype_presumptive),
+        by = "phenotype_presumptive",
+        suffix = c("_imputed", "_exome")
+    ) %>%
+    mutate(
+        prop_imputed = round(n_imputed / sum(n_imputed, na.rm = TRUE), 2),
+        prop_exome = round(n_exome / sum(n_exome, na.rm = TRUE), 2)
+    ) %>%
+    arrange(desc(n_exome))
+```
+
+<br>
+
+__Phenotype count CYP2D6__
+```{r cyp2d6_phenotype_counts}
+count(cyp2d6_imp, phenotype_presumptive) %>%
+    full_join(
+        count(cyp2d6_wes, phenotype_presumptive),
+        by = "phenotype_presumptive",
+        suffix = c("_imputed", "_exome")
+    ) %>%
+    mutate(
+        prop_imputed = round(n_imputed / sum(n_imputed), 2),
+        prop_exome = round(n_exome / sum(n_exome), 2)
+    ) %>%
+    arrange(desc(n_exome))
+```
+
+<br>
+
+## Concordance
+
+Check diplotype and phenotype concordance between integrated and imputed and exome data
+
+```{r merged_concordance, eval=FALSE}
+cyp2d6 <- map(
+    list(
+        select(cyp2d6_imp, sample_id, diplotype, phenotype),
+        select(cyp2d6_wes, sample_id, diplotype, phenotype),
+        select(cyp2d6_merged, sample_id, diplotype, phenotype)
+    ), ~ mutate(., sample_id = as.character(sample_id))
+) %>%
+    reduce(full_join, by = "sample_id")
+
+sum(cyp2d6$diplotype.x == cyp2d6$diplotype) / nrow(cyp2d6)
+
+
+# phenotype count comparison
+# count(cyp2d6_imp, phenotype) %>%
+#     full_join(
+#         count(cyp2d6_wes, phenotype),
+#         by = "phenotype",
+#         suffix = c("_imputed", "_exome")
+#     ) %>%
+#     full_join(count(cyp2d6_merged, phenotype), by = "phenotype")
+```
+
+<br>
+
+## Figures
+
+```{r diplotype_phenotype_alluvial, dev="svg", eval=FALSE}
+library(ggalluvial)
+library(RColorBrewer)
+
+p <- cyp2d6_imp %>%
+    mutate(
+        phenotype = factor(phenotype,
+            levels = c(
+                "Normal Metabolizer",
+                "Intermediate Metabolizer",
+                "Poor Metabolizer",
+                "Indeterminate",
+                "Not available"
+            )
+        )
+    ) %>%
+    select("diplotype", "phenotype") %>%
+    group_by_all() %>%
+    count() %>%
+    ggplot(aes(y = n, axis1 = phenotype, axis2 = diplotype)) +
+    theme(
+        panel.background = element_blank(),
+        text = element_text(size = 14)
+    )
+
+p +
+    geom_alluvium(aes(fill = phenotype)) +
+    scale_x_discrete(limits = c("Phenotype", "Diplotype"), expand = c(.1, .1)) +
+    labs(fill = "", title = "CYP2D6")
+
+# stat_stratum(width = .5) +
+# scale_x_discrete(limits = c("Phenotype", "Diplotype")) +
+# geom_text(stat = "stratum")
+
+# geom_label(stat = "stratum", aes(label = after_stat(stratum)), min.y = 100, size = 3) +
+```
+
+```{r diplotype_counts, eval=FALSE}
+library(UpSetR)
+
+cyp2c19_imp %>%
+    select(hap_1, hap_2) %>%
+    mutate_all(factor) %>%
+    model.matrix(~ hap_1 + hap_2, data = .) %>%
+    tibble()
+```

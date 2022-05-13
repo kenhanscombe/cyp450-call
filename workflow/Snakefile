@@ -1,0 +1,97 @@
+from pathlib import Path
+
+configfile: "config/config.yaml"
+
+# directories
+imp_dir = Path(config["imputed_dir"])
+prj_dir = Path(config["project_dir"])
+imputed = prj_dir / "imputed"
+genotyped = prj_dir / "genotyped"
+wrk_dir = Path(config["working_dir"])
+
+# sample information files
+sample_file = config['sample_file']
+fam_file = config['fam_file']
+related_file = config["related_file"]
+sqc_file = config["sqc_file"]
+
+# tools
+python3 = config["python3"]
+plink2 = config["plink2"]
+vcftools = config["vcftools"]
+r = config["r"]
+pgxpop = config["pgxpop"]
+bgenix = config["bgenix"]
+
+# parameters
+chromosome = config["chromosome"]
+locus = config["locus"]
+
+wildcard_constraints: chromosome="\d+"
+
+include: "rules/convert.smk"
+include: "rules/liftover.smk"
+include: "rules/exomes.smk"
+include: "rules/phase.smk"
+include: "rules/merge.smk"
+include: "rules/call.smk"
+
+
+rule all:
+    input:
+        # convert.smk - bgen to pfiles
+        expand("data/cyp_region_chr{chromosome}.bgen", chromosome=chromosome),
+        "results/samples_fail_ukb_qc.remove",
+        "results/samples_with_exome_data.keep",
+        expand("results/variants_fail_maf_info_chr{chromosome}.exclude", chromosome=chromosome),
+        expand("data/chr{chromosome}.pgen", chromosome=chromosome),
+        expand("data/chr{chromosome}.pvar", chromosome=chromosome),
+        expand("data/chr{chromosome}.psam", chromosome=chromosome),
+        
+        # liftover.smk - b37 to b38, pfiles to vcf
+        expand("data/chr{chromosome}.rmdup.list", chromosome=chromosome),
+        expand("data/chr{chromosome}_dedup.pgen", chromosome=chromosome),
+        expand("data/chr{chromosome}_dedup.pvar", chromosome=chromosome),
+        expand("data/chr{chromosome}_dedup.psam", chromosome=chromosome),
+        expand("data/chr{chromosome}.BED", chromosome=chromosome),
+        expand("data/chr{chromosome}_grch38.BED", chromosome=chromosome),
+        expand("data/chr{chromosome}_unlifted.BED", chromosome=chromosome),
+        expand("data/chr{chromosome}_grch38.pgen", chromosome=chromosome),
+        expand("data/chr{chromosome}_grch38.pvar", chromosome=chromosome),
+        expand("data/chr{chromosome}_grch38.psam", chromosome=chromosome),
+        expand("data/samples_relatedness_cutoff_chr{chromosome}.remove", chromosome=chromosome),
+        expand("data/chr{chromosome}.vcf.gz", chromosome=chromosome),
+
+        # exomes.smk - get exome blocks and variant qc
+        
+        # pVCF format
+        # "data/pvcf_blocks.txt",
+        # expand("data/chr{chromosome}_wes.vcf.gz", chromosome=chromosome),
+        
+        # PLINK format
+        "data/exome.fam",
+        "data/variant_plink_wes.keep",
+        expand("data/chr{chromosome}_plink_wes.vcf.gz", chromosome=chromosome),
+
+
+        # phase.smk - sort, index, phase
+        # expand("data/chr{chromosome}_sorted.vcf.gz", chromosome=chromosome),
+        # expand("data/chr{chromosome}_sorted.vcf.gz.tbi", chromosome=chromosome),
+        # expand("data/chr{chromosome}_phased.vcf.gz", chromosome=chromosome),
+        # expand("data/chr{chromosome}_phased.vcf.gz.tbi", chromosome=chromosome),
+        # expand("data/chr{chromosome}_wes_sorted.vcf.gz", chromosome=chromosome),
+        # expand("data/chr{chromosome}_wes_sorted.vcf.gz.tbi", chromosome=chromosome),
+        # expand("data/chr{chromosome}_wes_phased.vcf.gz", chromosome=chromosome),
+        # expand("data/chr{chromosome}_wes_phased.vcf.gz.tbi", chromosome=chromosome),
+
+        # merge.smk - integrate imputed and exome data, sort, index, phase
+        # expand("data/chr{chromosome}_merged.vcf.gz", chromosome=chromosome),
+        # expand("data/chr{chromosome}_merged_sorted.vcf.gz", chromosome=chromosome),
+        # expand("data/chr{chromosome}_merged_sorted.vcf.gz.tbi", chromosome=chromosome),
+        # expand("data/chr{chromosome}_merged_phased.vcf.gz", chromosome=chromosome),
+        # expand("data/chr{chromosome}_merged_phased.vcf.gz.tbi", chromosome=chromosome),
+
+        # call.smk - PGxPOP call and imputed SNP call
+        expand("data/chr{chromosome}.pgxpopout", chromosome=chromosome),
+        expand("data/chr{chromosome}_wes.pgxpopout", chromosome=chromosome),
+        # expand("data/chr{chromosome}_merged.pgxpopout", chromosome=chromosome)
